@@ -1,0 +1,16 @@
+.cache/
+.conda/
+.config/
+.pki/
+.ssh/
+.vscode/
+.vscode-server/
+.bash_history
+.bash_logout
+.bash_udit
+.bash_profile
+.bashrc
+.root_hist
+.Xauthority
+*.tar.gz
+Software/
