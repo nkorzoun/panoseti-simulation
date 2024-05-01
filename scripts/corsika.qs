@@ -7,6 +7,7 @@
 #SBATCH --time=4-00:00:00                   # Time limit days-hrs:min:sec
 #SBATCH --output=data/corsika_%a.log        # Standard output and error log
 #SBATCH --array=1-100                      # Array range
+#SBATCH --partition=phys, standard  
 
 # logging
 date

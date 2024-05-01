@@ -167,7 +167,7 @@ def genRuns(index, controller):
     return 'Created {} input files'.format(nVals)
 
 if __name__ == '__main__':
-    nFiles=1000 #number of input files
+    nFiles=100 #number of input files
     nShow=100 #number of showers per run - must match NSHOW in the template
 
     seed1=['{}'.format(np.random.randint(0,9999)) for i in range(nFiles)]
