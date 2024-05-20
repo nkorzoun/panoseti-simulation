@@ -4,9 +4,9 @@
 #SBATCH --mail-user=nkorzoun@udel.edu       # Where to send mail	
 #SBATCH --ntasks=1                          # Run a single task
 #SBATCH --mem=1gb                           # Job Memory
-#SBATCH --time=0-01:00:00                   # Time limit days-hrs:min:sec
+#SBATCH --time=0-08:00:00                   # Time limit days-hrs:min:sec
 #SBATCH --output=data/param_%a.log          # Standard output and error log
-#SBATCH --array=1-100                      # Array range
+#SBATCH --array=1-1000                      # Array range
 
 # logging
 date

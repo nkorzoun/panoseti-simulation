@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=root                     # Job name
-#SBATCH --mail-type=FAIL                    # Mail events (NONE, BEGIN, END, FAIL, ALL)
+#SBATCH --mail-type=FAIL, END               # Mail events (NONE, BEGIN, END, FAIL, ALL)
 #SBATCH --mail-user=nkorzoun@udel.edu       # Where to send mail	
 #SBATCH --ntasks=1                          # Run a single task
 #SBATCH --mem=1gb                           # Job Memory
