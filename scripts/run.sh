@@ -61,7 +61,7 @@ for file in /home/3437/Software/corsika/corsika-77410/run/*; do
 done
 
 # run corsika and corsikaIOreader
-corsika=$(sbatch --wait --chdir=$dir --dependency=afterok:$inputs --parsable corsika.qs)
+corsika=$(sbatch --wait --chdir=$dir --requeue --dependency=afterok:$inputs --parsable corsika.qs)
 
 # move corsika data and remove symlinks
 mv "$dir/run"/*.telescope "$dir/data"
