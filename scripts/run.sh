@@ -64,7 +64,7 @@ done
 corsika=$(sbatch --wait --chdir=$dir --requeue --dependency=afterok:$inputs --parsable corsika.qs)
 
 # move corsika data and remove symlinks
-mv "$dir/run"/*.telescope "$dir/data"
+mv "$dir/run/*.telescope" "$dir/data"
 rm -rf $dir/run
 
 # parameterize events
