@@ -51,6 +51,9 @@ float fShower_Xcore = -99999.;
 float fShower_Ycore = -99999.;
 float fShower_stdP = -99999.;
 
+// unit conversion
+const float petoadu = 16.0;
+
 /*
 * Read root file for displaying images
 */
@@ -116,7 +119,7 @@ void testspread(double x, double y){
         double xnew = std::get<0>(coords);
         double ynew = std::get<1>(coords);
 
-        test->Fill(xnew,ynew);
+        test->Fill(xnew,ynew,petoadu);
         
     }
     test->Draw("COLZ");
@@ -132,12 +135,12 @@ TH2I* addNSB(TH2I* image){
 
     // get telescope size to scale NSB
     t->Draw("telR","","goff");
-    double telrad = t->GetV1()[0];
+    //double telrad = t->GetV1()[0];
 
     int Nbins = image->GetNcells();
     TH2I *newImage = (TH2I*)image->Clone();
     for(int i=1; i<= Nbins ;i++){
-		newImage->AddBinContent(i, r->Poisson((telrad/0.25)*(telrad/0.25)*0.06)); // NSB
+		newImage->AddBinContent(i, r->Poisson(1)); // NSB
 	}
     image->Delete();
     return newImage;
@@ -152,7 +155,7 @@ TH2I* addElectronics(TH2I* image){
     TH2I *newImage = (TH2I*)image->Clone();
     for(int i=1; i<= Nbins ;i++){
         //newImage->AddBinContent(i, (int) r->Gaus(0,2.4));// electronics
-        newImage->AddBinContent(i, (int)r->Gaus(0,1));
+        newImage->AddBinContent(i, (int)r->Gaus(0,10)); // mean of 8, but simulate pedestal subtraction to reduce to 0
 	}
     image->Delete();
     return newImage;
@@ -252,7 +255,7 @@ double intersectionalArea(int R, int cx, int cy, int sx, int sy){
 }
 
 /*
-* Clean image according to p.e. thresholds
+* Clean image according to ADU thresholds
 */
 TH2I* clean(TH2I* image){
     
@@ -274,11 +277,11 @@ TH2I* clean(TH2I* image){
     int R = apertureRadius/0.06; // units of subpixels
 
     // get telescope size to scale NSB
-    t->Draw("telR","","goff");
-    double telrad = t->GetV1()[0];
+    //t->Draw("telR","","goff");
+    //double telrad = t->GetV1()[0];
 
-    double NSB = (telrad/0.25)*(telrad/0.25)*0.06; // mean value of NSB per pixel - p.e.
-    double readoutNoise = 1; // mean value of electronic readout noise - p.e.
+    double NSB = petoadu*0.06; // mean value of NSB per pixel - ADU
+    double readoutNoise = 10; // standard deviation of detector readout noise - ADU
 
     int SNR = 7; // signal to noise ratio required to keep pixel
 
@@ -316,7 +319,7 @@ TH2I* clean(TH2I* image){
                             if(!signal && m>=1 && m<=binsX*N && n>=1 && n<=binsY*N){
                                 double w = intersectionalArea(R,k,l,m,n)/(N*N);
                                 binSizeAvg += w * dividedImage->GetBinContent(m,n);
-                                imageThreshold += w * (readoutNoise + NSB);
+                                imageThreshold += w * (readoutNoise*readoutNoise + NSB);
                             }
                         }
                     }
@@ -699,6 +702,7 @@ TString showerInfo(int eventNumber){
     t->Draw("xCore:yCore",condition,"goff");
     double xCore = t->GetV1()[0];
     double yCore = t->GetV2()[0];
+
 
     TString info = Form(
         "=======================\n"
@@ -1517,23 +1521,23 @@ TH2I* telEvent(int telNumber, int eventNumber){
     TH2I* image = new TH2I(Form("T%d",telNumber), Form("T%d",telNumber), 32, -4.95, 4.95, 32, -4.95, 4.95 );
     //image->SetXTitle( "x" );
     //image->SetYTitle( "y" );
-    
+
     // fill image
     for(int i=0; i<NCp; i++){
         // scatter by PSF
-        std::tuple<double,double> coords = spread(imgX[i],imgY[i]);
+        std::tuple<double,double> coords = spread(imgX[i]*TMath::RadToDeg(),imgY[i]*TMath::RadToDeg());
         double x = std::get<0>(coords);
         double y = std::get<1>(coords);
 
         // sign flip ground->sky
-        image->Fill(x,-1*y);
+        image->Fill(x,-1*y,petoadu);
         
     }
     image = addNSB(image);
     image = addElectronics(image);
 
     // trigger threshold
-    if(image->GetMaximum()<6.5){
+    if(image->GetMaximum()<6.5*petoadu){
         image->Reset();
     }else{
         image = clean(image);
@@ -1544,11 +1548,42 @@ TH2I* telEvent(int telNumber, int eventNumber){
     image->SetStats(0);
 
     image->GetXaxis()->SetLabelSize(0);
-    image->GetYaxis()->SetLabelSize(0);
-    image->GetXaxis()->SetTickLength(0);
     image->GetYaxis()->SetTickLength(0);
     
     return image;
+}
+
+/*
+* get total signal in a pixel over all events in a single telescope
+* check if cleaning is enabled and if pedestals are subtracted before running
+*/
+void paramPixel(){
+    // check a file is loaded before trying to read data
+    if(!f){
+        std::cout << "No file loaded" << std::endl;
+        return;
+    }
+
+    // openfile
+    std::ofstream datafile;
+    datafile.open("simpixel.csv", std::ios_base::app);
+
+    // make all images in one telescope
+    int N = t->GetEntries();
+
+    const int tel = 1;
+    for(int eventNumber=1; eventNumber<=N+1; eventNumber++){
+        TH2I* image = telEvent(tel, eventNumber);
+        int signal = image->GetBinContent(16,16); //central pixel
+        // make sure image isnt empty
+        if(image->GetSumOfWeights()!=0){
+            datafile << signal << std::endl;
+        }
+        image->Delete();
+        
+    }
+    datafile.close();
+    // std::cout << "Parameterization completed " << std::endl;
 }
 
 
@@ -1570,19 +1605,17 @@ void paramCSV(bool reconstruct=false){
     datafile.open(output);
 
     if(!reconstruct){
-        datafile << "Event,Telescope,Size,Length,Width,Miss,Distance,Azwidth,Alpha,TrueAz,TrueZe,TrueXcore,TrueYcore,TrueEnergy" << std::endl;
+        datafile << "Event,Telescope,MeanX,StdX,MeanY,StdY,Phi,Size,Length,Width,Miss,Distance,Azwidth,Alpha,TrueAz,TrueZe,TrueXcore,TrueYcore,TrueEnergy" << std::endl;
     }else{
-        datafile << "Event,Telescope,Size,Length,Width,Miss,Distance,Azwidth,Alpha,Az,Ze,Xcore,Ycore,stdP,TrueAz,TrueZe,TrueXcore,TrueYcore,TrueEnergy" << std::endl;
+        datafile << "Event,Telescope,MeanX,StdX,MeanY,StdY,Phi,Size,Length,Width,Miss,Distance,Azwidth,Alpha,Az,Ze,Xcore,Ycore,stdP,TrueAz,TrueZe,TrueXcore,TrueYcore,TrueEnergy" << std::endl;
     }
 
     // make images and paramaterize every event in each telescope
     int N = t->GetEntries();
-
     // find event numbers
     t->Draw("eventNumber","","goff");
     int start = (int) t->GetV1()[0];
     int stop = (int) t->GetV1()[N-1];
-
     for(int eventNumber=start; eventNumber<=stop; eventNumber++){
         std::cout << "Parameterizing event "<< eventNumber << std::endl;
 
@@ -1654,7 +1687,7 @@ void paramCSV(bool reconstruct=false){
         if(!reconstruct){
             // write data to file
             for(int i = 0; i<Ntel; i++){
-                datafile << eventNumber << "," << i+1 << "," << size[i] << "," << length[i] << "," << width[i] << "," << miss[i] 
+                datafile << eventNumber << "," << i+1 << "," << meanx[i] << "," << stdx[i] << "," << meany[i] << "," << stdy[i] << "," << phi[i] <<","<< size[i] << "," << length[i] << "," << width[i] << "," << miss[i] 
                     << "," << dist[i] << "," << azwidth[i] << "," << alpha[i] << "," << az << "," << ze << "," << xCore 
                     << "," << yCore << "," << energy << std::endl;   
             }
@@ -1666,7 +1699,7 @@ void paramCSV(bool reconstruct=false){
 
                     // write data to file
                     for(int i = 0; i<Ntel; i++){
-                        datafile << eventNumber << "," << i+1 << "," << size[i] << "," << length[i] << "," << width[i] << "," << miss[i] 
+                        datafile << eventNumber << "," << i+1 << "," << meanx[i] << "," << stdx[i] << "," << meany[i] << "," << stdy[i] << "," << phi[i] <<","<< size[i] << "," << length[i] << "," << width[i] << "," << miss[i] 
                             << "," << dist[i] << "," << azwidth[i] << "," << alpha[i] << "," << fShower_Az << "," 
                             << fShower_Ze << "," << fShower_Xcore << "," << fShower_Ycore << "," << fShower_stdP << "," 
                             << az << "," << ze << "," << xCore << "," << yCore << "," << energy << std::endl;   
@@ -1675,7 +1708,7 @@ void paramCSV(bool reconstruct=false){
             }else{
                 // write data to file
                 for(int i = 0; i<Ntel; i++){
-                        datafile << eventNumber << "," << i+1 << "," << size[i] << "," << length[i] << "," << width[i] << "," << miss[i] 
+                        datafile << eventNumber << "," << i+1 << "," << meanx[i] << "," << stdx[i] << "," << meany[i] << "," << stdy[i] << "," << phi[i] <<","<< size[i] << "," << length[i] << "," << width[i] << "," << miss[i] 
                             << "," << dist[i] << "," << azwidth[i] << "," << alpha[i] << "," << "nan" << "," 
                             << "nan" << "," << "nan" << "," << "nan" << "," << "nan" << "," 
                             << az << "," << ze << "," << xCore << "," << yCore << "," << energy << std::endl;   
@@ -1733,7 +1766,7 @@ void showClean(int telNumber, int eventNumber){
         double y = std::get<1>(coords);
 
         // sign flip ground->sky
-        image->Fill(x,-1*y);
+        image->Fill(x,-1*y,petoadu);
         
     }
 
@@ -1764,7 +1797,7 @@ void showClean(int telNumber, int eventNumber){
     c->cd(3);
 
     // trigger threshold
-    if(image->GetMaximum()<6.5){
+    if(image->GetMaximum()<6.5*petoadu){
         image->Reset();
     }else{
         image = clean(image);
@@ -1841,7 +1874,7 @@ void timegrad(int eventNumber){
             double y = std::get<1>(coords);
 
             // sign flip ground->sky
-            tmp->Fill(x,-1*y);
+            tmp->Fill(x,-1*y,petoadu);
             if(imgT[i]<1e-9){ // prevent empty bins
                 time_grad->Fill(x,-1*y,1e-9);
             }else{
@@ -1867,7 +1900,7 @@ void timegrad(int eventNumber){
         tmp = addElectronics(tmp);
 
         // trigger threshold
-        if(tmp->GetMaximum()<6.5){
+        if(tmp->GetMaximum()<6.5*petoadu){
             tmp->Reset();
         }else{
             tmp = clean(tmp);
@@ -2034,6 +2067,8 @@ void panodisplay(int eventNumber){
 
         TelX[i]=t->GetV1()[i];
         TelY[i]=t->GetV2()[i];
+        TelX[i]=t->GetV1()[i];
+        TelY[i]=t->GetV2()[i];
         TelZ[i]=t->GetV3()[i];
     }
 
@@ -2092,4 +2127,3 @@ void panodisplay(int eventNumber){
     //t.Stop();
     //t.Print();
 }
-

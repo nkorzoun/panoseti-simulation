@@ -1,9 +1,10 @@
 #!/bin/bash
 #SBATCH --job-name=panoseti                 # Job name
+#SBATCH --requeue			    # Requeue if preempted	
 #SBATCH --mail-type=FAIL,TIME_LIMIT_90,REQUEUE      # Mail events (NONE, BEGIN, END, FAIL, ALL)
 #SBATCH --mail-user=nkorzoun@udel.edu       # Where to send mail	
 #SBATCH --ntasks=1                          # Run a single task
-#SBATCH --mem=1gb                           # Job Memory
+#SBATCH --mem=2gb                           # Job Memory
 #SBATCH --time=7-00:00:00                   # Time limit days-hrs:min:sec
 #SBATCH --output=data/corsika_%a.log        # Standard output and error log
 #SBATCH --array=1-1000                      # Array range
