@@ -1,4 +1,0 @@
-mv: cannot stat ‘/home/3437/MRK421-sim-gamma/run/*.telescope’: No such file or directory
-mv: cannot stat ‘/home/3437/MRK421-sim-proton/run/*.telescope’: No such file or directory
-mv: cannot stat ‘/home/3437/iron/run/*.telescope’: No such file or directory
-awk: fatal: cannot open file `/home/3437/iron/data/*.csv' for reading (No such file or directory)
