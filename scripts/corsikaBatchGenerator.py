@@ -189,6 +189,7 @@ if __name__ == '__main__':
     parser.add_argument('-e', '--energy-range', type=str, help='range of energies to simulate')
     parser.add_argument('-m', '--energy-slope', type=str, help='spectral slope to simulate')
     parser.add_argument('-z', '--zenith-range', type=str, help='range of allowable zenith angles')
+    parser.add_argument('-a', '--azimuth-range', type=str, help='range of allowable azimuth angles')
     parser.add_argument('-s', '--scattering-range', type=str, help='range of allowable shower core positions')
     args = parser.parse_args()
 
@@ -220,6 +221,12 @@ if __name__ == '__main__':
         controller.append(
             ['THETAP',[arg1 for i in range(nFiles)],[arg2 for i in range(nFiles)]]
         )
+    if args.azimuth_range:
+	arg1 = args.azimuth_range.split()[0]
+	arg2 = args.azimuth_range.split()[1]
+	controller.append(
+	    ['PHIP',[arg1 for i in range(nFiles)],[arg2 for i in range(nFiles)]]
+	)
     if args.scattering_range:
         arg1 = args.scattering_range.split()[0]
         arg2 = args.scattering_range.split()[1]

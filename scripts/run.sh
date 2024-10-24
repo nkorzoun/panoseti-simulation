@@ -14,6 +14,7 @@ while getopts ":p:e:m:z:s:" opt; do
     e) arg_e="$OPTARG";;
     m) arg_m="$OPTARG";;
     z) arg_z="$OPTARG";;
+    a) arg_a="$OPTARG";;
     s) arg_s="$OPTARG";;
     \?) echo "Invalid option: -$OPTARG" >&2;;
     :) echo "Option -$OPTARG requires an argument." >&2;;
@@ -52,6 +53,7 @@ inputs=$(sbatch --chdir=$dir --parsable inputs.qs \
     ${arg_e:+ -e="$arg_e"} \
     ${arg_m:+ -m="$arg_m"} \
     ${arg_z:+ -z="$arg_z"} \
+    ${arg_a:+ -a="$arg_a"} \
     ${arg_s:+ -s="$arg_s"}
 )
 
