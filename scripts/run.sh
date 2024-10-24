@@ -8,7 +8,7 @@
 blacklist=("scripts" "Software")
 
 # Argument handling
-while getopts ":p:e:m:z:s:" opt; do
+while getopts ":p:e:m:z:a:s:" opt; do
   case $opt in
     p) arg_p="$OPTARG";;
     e) arg_e="$OPTARG";;
