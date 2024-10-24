@@ -50,6 +50,7 @@ float fShower_Ze = -99999.;
 float fShower_Xcore = -99999.;
 float fShower_Ycore = -99999.;
 float fShower_stdP = -99999.;
+float fShower_Chi2 = -99999.;
 
 // unit conversion
 const float petoadu = 16.0;
@@ -97,12 +98,14 @@ std::tuple<double,double> spread(double positionX, double positionY){
     
     // convert from mm to degrees
     // 3.28mm per pixel, 9.9/32 degrees per pixel
-    fwhm = 5 * (fwhm/3.28)*(9.9/32);
+    fwhm = 10*(fwhm/3.28)*(9.9/32);
 
     // https://en.wikipedia.org/wiki/Full_width_at_half_maximum
     double sigma = fwhm/2.355;
 
     return std::make_tuple(r->Gaus(positionX, sigma),r->Gaus(positionY, sigma));
+
+
 }
 /*
 void testspread(double x, double y){
@@ -697,11 +700,14 @@ TString showerInfo(int eventNumber){
     t->Draw("energy:az:ze",condition,"goff");
     double energy = t->GetV1()[0];
     double az = t->GetV2()[0];
+    // CORSIKA to GrOptics
+    az=TMath::RadToDeg()*redang(M_PI - redang(TMath::DegToRad()*az - M_PI));
     double ze = t->GetV3()[0];
 
     t->Draw("xCore:yCore",condition,"goff");
-    double xCore = t->GetV1()[0];
-    double yCore = t->GetV2()[0];
+    // CORSIKA to GrOptics
+    double xCore = -1*t->GetV2()[0];
+    double yCore = t->GetV1()[0];
 
 
     TString info = Form(
@@ -746,8 +752,10 @@ TMultiGraph* eventMap(int eventNumber){
     telescopes->SetMarkerSize(3);
     for(int i=0;i<Ntel;i++){
 
-        double x = t->GetV1()[i];
-        double y = t->GetV2()[i];
+        // corsika X is North and Y is West
+        // here we want to plot Y-North and X-East
+        double x = -1*t->GetV2()[i];
+        double y = t->GetV1()[i];
         telescopes->SetPoint(i,x,y);
 
         // label point
@@ -769,8 +777,9 @@ TMultiGraph* eventMap(int eventNumber){
     //shower->SetMarkerSize(3);
     shower->SetMarkerStyle(47);
     shower->SetMarkerColor(kRed);
-    double x = t->GetV3()[0];
-    double y = t->GetV4()[0];
+    // CORSIKA to GrOptics
+    double x = -1*t->GetV4()[0];
+    double y = t->GetV3()[0];
     shower->SetPoint(0,x,y);
 
     // label point
@@ -874,6 +883,8 @@ void slaDtp2s( double xi, double eta, double raz, double decz,
     corresponds to rcs_method4 in VArrayAnalyzer
 */
 bool reconstruct_direction( unsigned int i_ntel,
+        double fTelElevation,
+        double fTelAzimuth,
 		double* img_size,
 		double* img_cen_x,
 		double* img_cen_y,
@@ -881,10 +892,6 @@ bool reconstruct_direction( unsigned int i_ntel,
 		double* img_length,
 		double* img_width)
 {
-	// telescope pointings
-    // assume telescope pointing directly upwards and North
-	double fTelElevation = 90.; 
-	double fTelAzimuth   = 0.;
 	
 	// make sure that all data arrays exist
 	if( !img_size || !img_cen_x || !img_cen_y
@@ -1394,6 +1401,60 @@ void tel_impact( float xcos, float ycos, float xfield, float yfield, float zfiel
 }
 
 /*
+* "borrowed" from eventDisplay
+* VSimpleStereoReconstructor.cpp
+*
+* calculate shower core in ground coordinates and
+* check validity of core reconstruction results
+*/
+bool fillShowerCore( float fTelElevation,
+    float fTelAzimuth,
+    float ximp,
+    float yimp )
+{
+    // check validity
+    if(!isnormal( ximp ) || !isnormal( yimp ) )
+    {
+        fShower_Xcore = -99999.;
+        fShower_Ycore = -99999.;
+        return false;
+    }
+    // reconstructed shower core in ground coordinates
+    float i_xcos = 0.;
+    float i_ycos = 0.;
+    float zimp = 0.;
+    float igz = 0.;
+    // calculate z in shower coordinates (for z=0 in ground coordinates)
+    if( fShower_Ze != 0. )
+    {
+        zimp = yimp / tan(( 90. - fShower_Ze ) * TMath::DegToRad() );
+    }
+    // calculate direction cosinii
+    // taking telescope plane as reference plane.
+    i_xcos = sin(( 90. - fTelElevation ) * TMath::DegToRad() )
+             * sin(( fTelAzimuth - 180. ) * TMath::DegToRad() );
+    if( fabs( i_xcos ) < 1.e-7 )
+    {
+        i_xcos = 0.;
+    }
+    i_ycos = sin(( 90. - fTelElevation ) * TMath::DegToRad() )
+             * cos(( fTelAzimuth - 180. ) * TMath::DegToRad() );
+    if( fabs( i_ycos ) < 1.e-7 )
+    {
+        i_ycos = 0.;
+    }
+    tel_impact( i_xcos, i_ycos, ximp, yimp, zimp, &fShower_Xcore, &fShower_Ycore, &igz, true );
+    if( isinf( fShower_Xcore ) || isinf( fShower_Ycore )
+            || TMath::IsNaN( fShower_Xcore ) || TMath::IsNaN( fShower_Ycore ) )
+    {
+        fShower_Xcore = -99999;
+        fShower_Ycore = -99999;
+        return false;
+    }
+    return true;
+}
+
+/*
     "borrowed" from eventDisplay
     VSimpleStereoReconstructor.cpp
 
@@ -1407,6 +1468,8 @@ void tel_impact( float xcos, float ycos, float xfield, float yfield, float zfiel
 bool reconstruct_core( unsigned int i_ntel,
 		double iShowerDir_xs,
 		double iShowerDir_ys,
+        double fTelElevation,
+        double fTelAzimuth,
         double* iTelX,
 		double* iTelY,
 		double* iTelZ,
@@ -1416,11 +1479,6 @@ bool reconstruct_core( unsigned int i_ntel,
 		double* img_width,
 		double* img_length)
 {
-    // telescope pointings
-    // assume telescope pointing directly upwards and North
-	double fTelElevation = 90.; 
-	double fTelAzimuth   = 0.;
-
     // sign flip in reconstruction
 	iShowerDir_ys *= -1.;
 	
@@ -1482,21 +1540,44 @@ bool reconstruct_core( unsigned int i_ntel,
 			w.push_back( iweight * iweight );
 		}
 	}
+
+    // check minimum angle between image lines; ignore if too small
+    // Note difference to evndisp reconstruction: apply this here for 2-tel events only
+    //
+    // NK - probably only matters if we ever impement disp. Setting to 0 for now.
+    double fAxesAngles_min = 0.;
+    if( m.size() == 2 )
+    {
+        float iangdiff = fabs( atan( m[0] ) - atan( m[1] ) ) * TMath::RadToDeg();
+        if( iangdiff < fAxesAngles_min || TMath::Abs( 180. - iangdiff ) < fAxesAngles_min )
+        {
+            fShower_Xcore = -99999.;
+            fShower_Ycore = -99999.;
+            fShower_Chi2 = 1.;
+            return false;
+        }
+    }
+
 	// Now call perpendicular_distance for the fit, returning ximp and yimp
 	rcs_perpendicular_fit( x, y, w, m, ( int )w.size(), &ximp, &yimp, &stdp );
-    fShower_Xcore = ximp;
-    fShower_Ycore = yimp;
-    fShower_stdP = stdp;
-	
+    
 	// return to ground coordinates
-    // NK - uh oh. idk what that means. Probably should have been using VSimpleStereoReconstructor::fillShowerCore
-
+    if( fillShowerCore( fTelElevation, fTelAzimuth, ximp, yimp ) )
+    {
+        fShower_Chi2 = 0.;
+    }
+    else
+    {
+        fShower_Chi2 = -1.;
+    }
+    fShower_stdP = stdp;
     return true;
 }
 
 
 /*
 * Create an image in a single telescope for a given event number
+* coordinate transformations done using GrOptics method GUtilityFuncts::sourceOnTelescopePlane
 */
 TH2I* telEvent(int telNumber, int eventNumber){
 
@@ -1509,30 +1590,73 @@ TH2I* telEvent(int telNumber, int eventNumber){
         return nullptr;
     }
 
+    // REL TO GrOptics COORDINATES
+    
     // draw tree
     auto condition = Form("(telID==%d && eventNumber==%d )", telNumber, eventNumber);
-    t->Draw("CX:CY",condition,"goff");
+    t->Draw("CX:CY:az:ze",condition,"goff");
 
     // read data from tree
     const int NCp = t->GetSelectedRows();
-    auto imgX = t->GetV1();
-    auto imgY = t->GetV2();
+    auto cx = t->GetV1();
+    auto cy = t->GetV2();
+    
+    auto prmAz = TMath::DegToRad()*t->GetV3()[0];
+    prmAz = redang(M_PI - redang(prmAz - M_PI)); // CORSIKA to GrOptics
+    auto prmZe = TMath::DegToRad()*t->GetV4()[0];
+    double telAz = prmAz;
+    double telZe = prmZe;
 
-    TH2I* image = new TH2I(Form("T%d",telNumber), Form("T%d",telNumber), 32, -4.95, 4.95, 32, -4.95, 4.95 );
-    //image->SetXTitle( "x" );
-    //image->SetYTitle( "y" );
+    // sourceOnTelescopePlane
+    double epsilon = numeric_limits<double>::epsilon();
+    double xcos_t = sin(telZe)*sin(telAz);
+    double ycos_t = sin(telZe)*cos(telAz);
+    if (TMath::AreEqualAbs(xcos_t,0.0,epsilon)){xcos_t = 0.0;}
+    if (TMath::AreEqualAbs(ycos_t,0.0,epsilon)){ycos_t = 0.0;}
+    double zcos_t = sqrt(1-xcos_t*xcos_t-ycos_t*ycos_t);
+    ROOT::Math::XYZVector nUnit_t(xcos_t,ycos_t,zcos_t);
 
+    // and now rotation matrix to get to telescope coordinates
+    ROOT::Math::Rotation3D rotM;
+    ROOT::Math::RotationZ rz(telAz);
+    ROOT::Math::RotationX rx(telZe);
+    rotM = rx*rz;
+    
     // fill image
+    TH2I* image = new TH2I(Form("T%d",telNumber), Form("T%d",telNumber), 32, -4.95, 4.95, 32, -4.95, 4.95);
     for(int i=0; i<NCp; i++){
+        double xcos_s = -1*cy[i]; // CORSIKA to GrOptics
+        double ycos_s = cx[i]; // CORSIKA to GrOptics
+        if (TMath::AreEqualAbs(xcos_s,0.0,epsilon)){xcos_s = 0.0;}
+        if (TMath::AreEqualAbs(ycos_s,0.0,epsilon)){ycos_s = 0.0;}
+        double zcos_s = sqrt(1-xcos_s*xcos_s-ycos_s*ycos_s);
+        ROOT::Math::XYZVector nUnit_s(xcos_s,ycos_s,zcos_s);
+        // some vector algebra to find the vector to the intersection point
+        double dotP = nUnit_s.Dot(nUnit_t);
+        ROOT::Math::XYZVector tTos_vecGC = (nUnit_s/dotP) - nUnit_t;
+        ROOT::Math::XYZVector tTos_vecTC = rotM*tTos_vecGC;
+        if (TMath::AreEqualAbs(tTos_vecTC.X(),0.0,numeric_limits<double>::epsilon())) {tTos_vecTC.SetX(0.0);}
+        if (TMath::AreEqualAbs(tTos_vecTC.Y(),0.0,numeric_limits<double>::epsilon())) {tTos_vecTC.SetY(0.0);}
+        if (TMath::AreEqualAbs(tTos_vecTC.Z(),0.0,numeric_limits<double>::epsilon())) {tTos_vecTC.SetZ(0.0);}
+        double imgX = TMath::RadToDeg()*tTos_vecTC.X();
+        double imgY = TMath::RadToDeg()*tTos_vecTC.Y();
+
         // scatter by PSF
-        std::tuple<double,double> coords = spread(imgX[i]*TMath::RadToDeg(),imgY[i]*TMath::RadToDeg());
+        std::tuple<double,double> coords = spread(imgX,imgY);
         double x = std::get<0>(coords);
         double y = std::get<1>(coords);
 
-        // sign flip ground->sky
-        image->Fill(x,-1*y,petoadu);
-        
+        // sign flip telescope coordinates to camera coordinates: y-> -1*y
+            // via GrOptics README:
+                // "For historical reasons, the camera coordinate system's y axis
+                //  is a reflection of the y-axis of the telescope coordinate"
+    
+        // okay but in GrOptics this turns into x-> -1*x, so is the reflection ON the y-axis, and not that the y coordinate is reflected? i.e. x-> -1*x???
+        // https://github.com/groptics/GrOptics/blob/8fccd40fb8141f420c7e395626a623fd3baf7555/src/GArrayTel.cpp#L192
+
+        image->Fill(-1*x,y,petoadu); 
     }
+
     image = addNSB(image);
     image = addElectronics(image);
 
@@ -1541,16 +1665,19 @@ TH2I* telEvent(int telNumber, int eventNumber){
         image->Reset();
     }else{
         image = clean(image);
-        //image->Draw("COLZ");
+        image->Draw("COLZ");
     }
 
     image->ResetStats();
     image->SetStats(0);
 
     image->GetXaxis()->SetLabelSize(0);
+    image->GetYaxis()->SetLabelSize(0);
+    image->GetXaxis()->SetTickLength(0);
     image->GetYaxis()->SetTickLength(0);
     
     return image;
+    
 }
 
 /*
@@ -1601,7 +1728,7 @@ void paramCSV(bool reconstruct=false){
     // openfile
     std::ofstream datafile;
     std::string output = f->GetName();
-    output = output.substr(0,output.size()-5)+".csv";
+    output = output.substr(0,output.size()-5)+".10xSig.csv";
     datafile.open(output);
 
     if(!reconstruct){
@@ -1668,8 +1795,9 @@ void paramCSV(bool reconstruct=false){
             auto condition = Form("eventNumber==%d", eventNumber);
             t->Draw("telXpos:telYpos:telZpos",condition,"goff");
 
-            TelX[i]=t->GetV1()[i];
-            TelY[i]=t->GetV2()[i];
+            // convert from CORSIKA to GrOptics
+            TelX[i]=-1*t->GetV2()[i];
+            TelY[i]=t->GetV1()[i];
             TelZ[i]=t->GetV3()[i];
       
         }
@@ -1678,11 +1806,14 @@ void paramCSV(bool reconstruct=false){
         t->Draw("energy:az:ze",condition,"goff");
         double energy = t->GetV1()[0];
         double az = t->GetV2()[0];
+        // CORSIKA to GrOptics
+        az=TMath::RadToDeg()*redang(M_PI - redang(TMath::DegToRad()*az - M_PI));
         double ze = t->GetV3()[0];
         
         t->Draw("xCore:yCore",condition,"goff");
-        double xCore = t->GetV1()[0];
-        double yCore = t->GetV2()[0];
+        // CORSIKA to GrOptics
+        double xCore = -1*t->GetV2()[0];
+        double yCore = t->GetV1()[0];
 
         if(!reconstruct){
             // write data to file
@@ -1693,9 +1824,9 @@ void paramCSV(bool reconstruct=false){
             }
         }else{
             // reconstruction
-            if(reconstruct_direction(Ntel,size,meanx,meany,phi_rad,length,width)){
+            if(reconstruct_direction(Ntel,90-ze,az,size,meanx,meany,phi_rad,length,width)){
 
-                if(reconstruct_core(Ntel, fShower_Xoffset, fShower_Yoffset, TelX, TelY, TelZ, size, meanx, meany, width, length)){
+                if(reconstruct_core(Ntel, fShower_Xoffset, fShower_Yoffset, 90-ze, az, TelX, TelY, TelZ, size, meanx, meany, width, length)){
 
                     // write data to file
                     for(int i = 0; i<Ntel; i++){
@@ -2065,12 +2196,18 @@ void panodisplay(int eventNumber){
         auto condition = Form("eventNumber==%d", eventNumber);
         t->Draw("telXpos:telYpos:telZpos",condition,"goff");
 
-        TelX[i]=t->GetV1()[i];
-        TelY[i]=t->GetV2()[i];
-        TelX[i]=t->GetV1()[i];
-        TelY[i]=t->GetV2()[i];
+        // convert CORSIKA to GrOptics
+        TelX[i]=-1*t->GetV2()[i];
+        TelY[i]=t->GetV1()[i];
         TelZ[i]=t->GetV3()[i];
     }
+
+    auto condition = Form("eventNumber==%d", eventNumber);
+    t->Draw("az:ze",condition,"goff");
+    double az = t->GetV1()[0];
+    // CORSIKA to GrOptics
+    az=TMath::RadToDeg()*redang(M_PI - redang(TMath::DegToRad()*az - M_PI));
+    double ze = t->GetV2()[0];
 
     // showerInfo
     std::cout<< "Simulated Shower Params:" << std::endl << showerInfo(eventNumber) << std::endl ;
@@ -2085,11 +2222,11 @@ void panodisplay(int eventNumber){
     gPad->SetRightMargin(0.05);
 
     // reconstruction
-    if(reconstruct_direction(Ntel,size,meanx,meany,phi_rad,length,width)){
+    if(reconstruct_direction(Ntel,90-ze,az,size,meanx,meany,phi_rad,length,width)){
         std::cout<<"Reconstructed Direction: "<<fShower_Az <<", " << fShower_Ze <<std::endl;
 
         // draw telescopes
-        if(reconstruct_core(Ntel, fShower_Xoffset, fShower_Yoffset, TelX, TelY, TelZ, size, meanx, meany, width, length)){
+        if(reconstruct_core(Ntel, fShower_Xoffset, fShower_Yoffset, 90-ze ,az,TelX, TelY, TelZ, size, meanx, meany, width, length)){
             std::cout<<"Reconstructed Core: "<< fShower_Xcore << " m" << ", " << fShower_Ycore << " m" << ", +/- " << fShower_stdP << " m" << std::endl;
 
             // point
