@@ -43,8 +43,13 @@ TTree *t;
 int Ntel;
 
 // Fixed telescope pointing (GrOptics definition)
-float fTel_Zenith = 20;
-float fTel_Azimuth = 180;
+// float fTel_Zenith = 20;
+// float fTel_Azimuth = 180;
+
+// Magnetic Declination in Degrees (unrotate CORSIKA i.e. ARRANG)
+// float fMag_Dec = 12.77; // LICK
+float fMag_Dec = 11.03;// PALOMAR
+// float fMag_Dec = 10.4; // FLWO
 
 // Reconstructed params
 float fShower_Xoffset = -99999.;
@@ -703,12 +708,13 @@ TString showerInfo(int eventNumber){
     auto condition = Form("eventNumber==%d", eventNumber);
     t->Draw("energy:az:ze",condition,"goff");
     double energy = t->GetV1()[0];
-    //double az = t->GetV2()[0];
-    // CORSIKA to GrOptics
-    //az=TMath::RadToDeg()*redang(M_PI - redang(TMath::DegToRad()*az - M_PI));
-    //double ze = t->GetV3()[0];
-    double az = fTel_Azimuth;
-    double ze = fTel_Zenith;
+    double az = t->GetV2()[0];
+    //CORSIKA to GrOptics
+    az=TMath::RadToDeg()*redang(M_PI - redang(TMath::DegToRad()*az - M_PI));
+    az=az + fMag_Dec; // unrotate array to correct for magnetic declination, ARRANG
+    double ze = t->GetV3()[0];
+    // double az = fTel_Azimuth;
+    // double ze = fTel_Zenith;
 
     t->Draw("xCore:yCore",condition,"goff");
     // CORSIKA to GrOptics
@@ -1550,8 +1556,7 @@ bool reconstruct_core( unsigned int i_ntel,
     // check minimum angle between image lines; ignore if too small
     // Note difference to evndisp reconstruction: apply this here for 2-tel events only
     //
-    // NK - probably only matters if we ever impement disp. Setting to 0 for now.
-    double fAxesAngles_min = 0.;
+    double fAxesAngles_min = 0.; // NK - probably only matters if we ever implement disp. Setting to 0 for now.
     if( m.size() == 2 )
     {
         float iangdiff = fabs( atan( m[0] ) - atan( m[1] ) ) * TMath::RadToDeg();
@@ -1607,14 +1612,15 @@ TH2I* telEvent(int telNumber, int eventNumber){
     auto cx = t->GetV1();
     auto cy = t->GetV2();
     
-    // auto prmAz = TMath::DegToRad()*t->GetV3()[0];
-    // prmAz = redang(M_PI - redang(prmAz - M_PI)); // CORSIKA to GrOptics
-    // auto prmZe = TMath::DegToRad()*t->GetV4()[0];
+    auto prmAz = TMath::DegToRad()*t->GetV3()[0];
+    prmAz = redang(M_PI - redang(prmAz - M_PI)); // CORSIKA to GrOptics
+    auto prmZe = TMath::DegToRad()*t->GetV4()[0];
     // double telAz = prmAz;
-    // double telZe = prmZe;
+    double telAz = prmAz + fMag_Dec*TMath::DegToRad(); // unrotate array to correct for magnetic declination, ARRANG
+    double telZe = prmZe;
 
-    double telAz = fTel_Azimuth;
-    double telZe = fTel_Zenith;
+    // double telAz = fTel_Azimuth;
+    // double telZe = fTel_Zenith;
 
     // sourceOnTelescopePlane
     double epsilon = numeric_limits<double>::epsilon();
@@ -1737,7 +1743,7 @@ void paramCSV(bool reconstruct=false){
     // openfile
     std::ofstream datafile;
     std::string output = f->GetName();
-    output = output.substr(0,output.size()-5)+".10xSig.csv";
+    output = output.substr(0,output.size()-5)+".10xSig.reconstructed.csv";
     datafile.open(output);
 
     if(!reconstruct){
@@ -1814,12 +1820,13 @@ void paramCSV(bool reconstruct=false){
         auto condition = Form("eventNumber==%d", eventNumber);
         t->Draw("energy:az:ze",condition,"goff");
         double energy = t->GetV1()[0];
-        // double az = t->GetV2()[0];
-        // // CORSIKA to GrOptics
-        // az=TMath::RadToDeg()*redang(M_PI - redang(TMath::DegToRad()*az - M_PI));
-        // double ze = t->GetV3()[0];
-        double az = fTel_Azimuth;
-        double ze = fTel_Zenith;
+        double az = t->GetV2()[0];
+        // CORSIKA to GrOptics
+        az=TMath::RadToDeg()*redang(M_PI - redang(TMath::DegToRad()*az - M_PI));
+        az=az + fMag_Dec; // unrotate array to correct for magnetic declination, ARRANG
+        double ze = t->GetV3()[0];
+        // double az = fTel_Azimuth;
+        // double ze = fTel_Zenith;
         
         t->Draw("xCore:yCore",condition,"goff");
         // CORSIKA to GrOptics
@@ -2213,14 +2220,15 @@ void panodisplay(int eventNumber){
         TelZ[i]=t->GetV3()[i];
     }
 
-    // auto condition = Form("eventNumber==%d", eventNumber);
-    // t->Draw("az:ze",condition,"goff");
-    // double az = t->GetV1()[0];
-    // // CORSIKA to GrOptics
-    // az=TMath::RadToDeg()*redang(M_PI - redang(TMath::DegToRad()*az - M_PI));
-    // double ze = t->GetV2()[0];
-    double az = fTel_Azimuth;
-    double ze = fTel_Zenith;
+    auto condition = Form("eventNumber==%d", eventNumber);
+    t->Draw("az:ze",condition,"goff");
+    double az = t->GetV1()[0];
+    // CORSIKA to GrOptics
+    az=TMath::RadToDeg()*redang(M_PI - redang(TMath::DegToRad()*az - M_PI));
+    az=az + fMag_Dec; // unrotate array to correct for magnetic declination, ARRANG
+    double ze = t->GetV2()[0];
+    // double az = fTel_Azimuth;
+    // double ze = fTel_Zenith;
 
     // showerInfo
     std::cout<< "Simulated Shower Params:" << std::endl << showerInfo(eventNumber) << std::endl ;
