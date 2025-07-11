@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=panoseti                 # Job name
+#SBATCH --job-name=corsika                  # Job name
 #SBATCH --requeue			    # Requeue if preempted	
 #SBATCH --mail-type=FAIL,TIME_LIMIT_90,REQUEUE      # Mail events (NONE, BEGIN, END, FAIL, ALL)
 #SBATCH --mail-user=nkorzoun@udel.edu       # Where to send mail	

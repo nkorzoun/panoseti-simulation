@@ -9,7 +9,7 @@ import argparse
 #
 inptemp='''RUNNR 1
 EVTNR 1
-NSHOW 100
+NSHOW 10
 PRMPAR 1
 ERANGE 1E4 1E4
 ESLOPE -2
@@ -241,7 +241,7 @@ def genRuns(index, controller):
 
 if __name__ == '__main__':
     nFiles=1000 #number of input files
-    nShow=100 #number of showers per run - must match NSHOW in the template
+    nShow=10 #number of showers per run - must match NSHOW in the template
 
     seed1=['{}'.format(np.random.randint(0,9999)) for i in range(nFiles)]
     seed2=['{}'.format(np.random.randint(0,9999)) for i in range(nFiles)]

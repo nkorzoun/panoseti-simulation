@@ -4,6 +4,7 @@
 #SBATCH --time=7-00:00:00
 #SBATCH --mem=1GB
 #SBATCH --ntasks=1
+#SBATCH --output=../panoseti_master.log
 
 # Load necessary modules (if any)
 # module load <module-name>
@@ -67,27 +68,34 @@ for file in /home/3437/Software/corsika/corsika-77410/run/*; do
 done
 
 # Run corsika and corsikaIOreader
-corsika=$(sbatch --wait --chdir=$dir --dependency=afterok:$inputs --parsable corsika.qs)
+corsika=$(sbatch --chdir=$dir --dependency=afterok:$inputs --parsable corsika.qs)
+echo "corsika job ID:$corsika"
+sleep 10
 
 # Move corsika data and remove symlinks
-mv "$dir/run/*.telescope" "$dir/data"
-wait
-rm -rf $dir/run
+array_range=$(grep "#SBATCH.*--array" corsika.qs | sed 's/.*--array=\([0-9-]*\).*/\1/')
+cleanup=$(sbatch --chdir=$dir --dependency=afterok:${corsika}_[${array_range}] --parsable cleanup.qs)
+echo "cleanup job ID:$cleanup"
+sleep 10
 
 # Parameterize events
-param=$(sbatch --wait --chdir=$dir --dependency=afterok:$corsika --parsable param.qs)
+param=$(sbatch --chdir=$dir --dependency=afterok:$cleanup --parsable param.qs)
+echo "param job ID:$param"
+sleep 10
 
 # Combine CSV files
-awk 'FNR==1 && NR!=1{next;}{print}' $dir/data/*.csv > $dir/data/_merged.csv
+merge=$(sbatch --chdir=$dir --dependency=afterok:$param --parsable merge.qs)
+echo "merge job ID:$merge"
+sleep 10
 
 # Combine .root files
-root=$(sbatch --wait --chdir=$dir --dependency=afterok:$param --parsable root.qs)
+root=$(sbatch --chdir=$dir --dependency=afterok:$merge --parsable root.qs)
+echo "root job ID:$root"
+sleep 10
 
 # Zip the output directory
-wait
-cd /home/3437
-tar -czf $1.tar.gz $1/data $1/config
+final=$(sbatch --chdir=$dir --dependency=afterok:$root --parsable final.qs)
+echo "final job ID:$final"
 
-# Clean up
-rm -rf $dir
-
+echo "Pipeline submitted"
+echo "Monitor with: squeue -j <job ID>"
